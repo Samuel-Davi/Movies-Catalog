@@ -1,6 +1,6 @@
 'use client'
 import { useEffect, useState } from "react";
-import { getCategories, getMovies, getMoviesByCategory } from "./data/api";
+import { getCategories, getMovies } from "./data/api";
 import Link from "next/link";
 import { TypeFilmes, TypeGenero } from "./types/types";
 
@@ -10,36 +10,94 @@ export default function Home() {
   const [filmes, setFilmes] = useState<TypeFilmes[]>([])
   const [generos, setGeneros] = useState<undefined | TypeGenero[]>([]);
   const [generosSelecionados, setGenerosSelecionados] = useState<number[]>([]);
+  const [page, setPage] = useState(1); 
+  const [loading, setLoading] = useState(false); 
+  const [hasMore, setHasMore] = useState(true);
 
-  async function getData(search:string = ""){
-    const newData = await getMovies(search, generosSelecionados)
-    setFilmes(newData)
+  async function getData(){
+    const newData = await getMovies(busca, generosSelecionados, page)
+    // console.log(newData)
+    setFilmes((prevMovies) => {
+      const newUniqueMovies = newData.filter(
+        (newMovie) => !prevMovies.some((m) => m.id === newMovie.id)
+      );
+      return [...prevMovies, ...newUniqueMovies];
+    });
+    setHasMore(newData.length > 0)
     const categorias = await getCategories()
     setGeneros(categorias)
   }
 
-  async function getMoviesByCategories(){
-    if (generosSelecionados) setFilmes(await getMoviesByCategory(generosSelecionados))
+  async function getNewData(){
+    const newData = await getMovies(busca, generosSelecionados, page)
+    // console.log(newData)
+    setFilmes(newData);
+    setHasMore(newData.length > 0)
+    const categorias = await getCategories()
+    setGeneros(categorias)
   }
+
+  // async function getMoviesByCategories(){
+  //   if (generosSelecionados) setFilmes(await getMoviesByCategory(generosSelecionados))
+  // }
+
+  const handleScroll = () => {
+    if (
+      window.innerHeight + document.documentElement.scrollTop ===
+      document.documentElement.offsetHeight &&
+      !loading && hasMore
+    ) {
+      setPage((prevPage) => prevPage + 1); // Avança para a próxima página
+    }
+  }
+
+  useEffect(() => {
+    window.addEventListener('scroll', handleScroll);
+    return () => {
+      window.removeEventListener('scroll', handleScroll);
+    };
+  }, [loading, hasMore]);
   
   useEffect(() => {
+    setLoading(true)
     getData()
-  },[])
+    setLoading(false)
+  },[page])
 
   useEffect(() => {
-    getData(busca)
+    setPage(1)
+    getNewData()
   }, [busca, setBusca])
+
   useEffect(() => {
-    if(generosSelecionados) getMoviesByCategories(); else getData()
+    setPage(1)
+    getNewData()
+    // setFilmesFiltrados(generosSelecionados && generosSelecionados.length > 0 ? filmes.filter((filme) => generosSelecionados.map(gen => filme.genre_ids.includes(gen))) : filmes)
   }, [generosSelecionados])
 
+  useEffect(() => {
+    // setFilmesFiltrados(generosSelecionados && generosSelecionados.length > 0 ? filmes.filter((filme) => generosSelecionados.map(gen => filme.genre_ids.includes(gen))) : filmes)
+  }, [filmes])
+
   return (
-    <main className="p-8">
-      <h1 className="text-3xl font-bold mb-6">Catálogo de Filmes</h1>
+    <main className="px-6 py-4">
+      <header className="flex items-center justify-between mb-5">
+        <h1 className="text-3xl font-bold">Catálogo de Filmes</h1>
+        <div className="flex px-6 py-4">
+          <Link
+            href="/favorites"
+            className=" bg-red-600 text-white px-4 py-2 rounded-md hover:bg-red-700 transition"
+          >
+            ❤️ Favoritos
+          </Link>
+        </div>
+      </header>
+
       <div className="mb-6">
         <label className="block mb-2 text-sm font-medium text-gray-700 dark:text-gray-200">
           Filtrar por gêneros
         </label>
+        
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
           {generos?.map((genero) => (
             <label
@@ -68,7 +126,7 @@ export default function Home() {
         value={busca}
         onChange={(e) => setBusca(e.target.value)}
         onKeyDown={(e) => {
-          if (e.key === 'Enter') getData(busca);
+          if (e.key === 'Enter') getData();
         }}
         className=" border-2 rounded-2xl p-2 mb-10 w-full"
       />
@@ -89,6 +147,16 @@ export default function Home() {
           </Link>
         ))}
       </div>
+      {loading && (
+        <div className="flex justify-center mt-8">
+          <div className="w-8 h-8 border-4 border-blue-500 border-t-transparent rounded-full animate-spin" />
+        </div>
+      )}
+
+      {!hasMore && (
+        <p className="text-center text-gray-400 mt-6">Você chegou ao fim dos resultados.</p>
+      )}
+
     </main>
   );
 }
